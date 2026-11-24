@@ -289,6 +289,24 @@ struct Upscaler {
 			}
 		}
 		reset = true;
+		FfxApiEffectMemoryUsage memory_usage {};
+		ffxQueryDescUpscaleGetGPUMemoryUsage memory_query {};
+		memory_query.header.type            = FFX_API_QUERY_DESC_TYPE_UPSCALE_GPU_MEMORY_USAGE;
+		memory_query.gpuMemoryUsageUpscaler = &memory_usage;
+		const auto memory_query_result = TheLibrary().query(&context, &memory_query.header);
+		if (memory_query_result != FFX_API_RETURN_OK) {
+			Report("Super resolution: FSR 4 GPU memory query failed (%u)\n",
+			       static_cast<uint32_t>(memory_query_result));
+		} else if (memory_usage.totalUsageInBytes == 0) {
+			Report("Super resolution: FSR 4 GPU memory query returned zero usage\n");
+		} else {
+			const auto mib = [](uint64_t bytes) {
+				return (bytes + (uint64_t {1} << 19u)) >> 20u;
+			};
+			Report("Super resolution: FSR 4 GPU memory usage %llu MiB (%llu MiB aliasable)\n",
+			       static_cast<unsigned long long>(mib(memory_usage.totalUsageInBytes)),
+			       static_cast<unsigned long long>(mib(memory_usage.aliasableUsageInBytes)));
+		}
 		Report("Super resolution: AMD FSR 4 %ux%u -> %ux%u (AMD's DLLs through ffx-vk-linux)\n", render.width, render.height,
 		       display.width, display.height);
 		return true;
