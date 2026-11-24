@@ -151,7 +151,8 @@ bool GraphicContext::CreateAllocator() {
 	// budget short of 12 GiB after them counts as small (a 16 GB card whose budget other programs had cut to 12.2 GiB ran
 	// out with FSR; issue #215: a 16 GB RTX 5080 with DLSS-G and DLSS ran out with the texture pools kept).
 	const uint64_t reserved = Libs::Graphics::FrameGen::VideoMemoryReserve();
-	small_video_memory      = GetTotalMemoryBudget() < (uint64_t {12} << 30u) + reserved;
+	// Keep the small-memory classification on the legacy budget policy even where GetTotalMemoryBudget exposes more.
+	small_video_memory      = GetMemoryBudget(true) < (uint64_t {12} << 30u) + reserved;
 	uint64_t video_memory   = 0; // (the largest device-local heap, less a simulation's ballast)
 	for (uint32_t i = 0; i < physical_device_memory_properties.memoryHeapCount; i++)
 		if (physical_device_memory_properties.memoryHeaps[i].flags & vk::MemoryHeapFlagBits::eDeviceLocal)
@@ -315,6 +316,14 @@ uint64_t GraphicContext::GetVideoMemoryRoom() const {
 }
 
 uint64_t GraphicContext::GetTotalMemoryBudget() const {
+#if defined(__linux__)
+	return GetMemoryBudget(false);
+#else
+	return GetMemoryBudget(true);
+#endif
+}
+
+uint64_t GraphicContext::GetMemoryBudget(bool reserve_discrete_headroom) const {
 	if (allocator == nullptr) {
 		return 0;
 	}
@@ -341,7 +350,7 @@ uint64_t GraphicContext::GetTotalMemoryBudget() const {
 	usage -= std::min(usage, simulation_ballast_bytes);
 	local -= std::min(local, simulation_ballast_bytes);
 	if (discrete) {
-		return budget - std::min<uint64_t>(budget / 8, 1024ull * 1024 * 1024);
+		return reserve_discrete_headroom ? budget - std::min<uint64_t>(budget / 8, 1024ull * 1024 * 1024) : budget;
 	}
 	constexpr uint64_t system_reserve = 8ull * 1024 * 1024 * 1024;
 	const auto         available      = budget > usage ? budget - usage : uint64_t {0};

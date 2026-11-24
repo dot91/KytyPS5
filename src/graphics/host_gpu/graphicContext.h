@@ -194,6 +194,7 @@ struct GraphicContext {
 	[[nodiscard]] bool     QueryLocalVideoMemory(uint64_t* usage, uint64_t* budget) const;
 	// A log line on where the video memory goes (Windows' and VMA's figures): diagnostics.
 	void                   LogVideoMemory(const char* label) const;
+	// Linux exposes the full discrete-GPU budget; other platforms reserve up to 1 GiB.
 	[[nodiscard]] uint64_t GetTotalMemoryBudget() const;
 	// `guest_texture`: an image of the guest's (Image, image.cpp), not one of the emulator's own (presenter, frame generation, super
 	// resolution): KYTY_TEXTURE_HOST_MODE=pd places only those flexibly.
@@ -234,6 +235,8 @@ struct GraphicContext {
 	uint32_t screen_height = 0;
 
 private:
+	[[nodiscard]] uint64_t GetMemoryBudget(bool reserve_discrete_headroom) const;
+
 	mutable std::mutex                                 m_format_properties_mutex;
 	mutable std::map<vk::Format, vk::FormatProperties> m_format_properties;
 	mutable std::mutex                                 m_image_format_properties_mutex;
