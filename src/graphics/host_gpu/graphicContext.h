@@ -194,6 +194,7 @@ struct GraphicContext {
 	[[nodiscard]] bool     QueryLocalVideoMemory(uint64_t* usage, uint64_t* budget) const;
 	// A log line on where the video memory goes (Windows' and VMA's figures): diagnostics.
 	void                   LogVideoMemory(const char* label) const;
+	// Discrete GPU: deducts up to 1 GiB headroom (KYTY_GPU_HEADROOM_MB overrides; 0 = none).
 	[[nodiscard]] uint64_t GetTotalMemoryBudget() const;
 	// `guest_texture`: an image of the guest's (Image, image.cpp), not one of the emulator's own (presenter, frame generation, super
 	// resolution): KYTY_TEXTURE_HOST_MODE=pd places only those flexibly.

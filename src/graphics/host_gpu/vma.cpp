@@ -341,7 +341,25 @@ uint64_t GraphicContext::GetTotalMemoryBudget() const {
 	usage -= std::min(usage, simulation_ballast_bytes);
 	local -= std::min(local, simulation_ballast_bytes);
 	if (discrete) {
-		return budget - std::min<uint64_t>(budget / 8, 1024ull * 1024 * 1024);
+		uint64_t headroom = std::min<uint64_t>(budget / 8, 1024ull * 1024 * 1024);
+		// KYTY_GPU_HEADROOM_MB=<n>: override headroom in MiB (0 = none, max 1024).
+		static bool logged = false;
+		const char* env = std::getenv("KYTY_GPU_HEADROOM_MB");
+		if (!logged) {
+			if (env != nullptr && *env != '\0') {
+				uint64_t headroom_mib = std::strtoull(env, nullptr, 10);
+				headroom_mib = std::min(headroom_mib, 1024ull);
+				headroom = headroom_mib * 1024 * 1024;
+				if (headroom_mib != 0)
+					std::printf("GPU headroom: %llu MiB (KYTY_GPU_HEADROOM_MB=%s)\n",
+					            static_cast<unsigned long long>(headroom_mib), env);
+			} else {
+				std::printf("GPU headroom: %llu MiB (default)\n",
+				            static_cast<unsigned long long>(headroom >> 20u));
+			}
+			logged = true;
+		}
+		return budget - headroom;
 	}
 	constexpr uint64_t system_reserve = 8ull * 1024 * 1024 * 1024;
 	const auto         available      = budget > usage ? budget - usage : uint64_t {0};
