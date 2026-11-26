@@ -341,32 +341,37 @@ uint64_t GraphicContext::GetTotalMemoryBudget() const {
 	usage -= std::min(usage, simulation_ballast_bytes);
 	local -= std::min(local, simulation_ballast_bytes);
 	if (discrete) {
-		uint64_t headroom = std::min<uint64_t>(budget / 8, 1024ull * 1024 * 1024);
-		// KYTY_GPU_HEADROOM_MB=<n>: override headroom in MiB (0 = none, max 1024).
-		// The value is computed once and cached so subsequent calls (classification, logging)
-		// all use the same headroom regardless of VMA budget fluctuation.
-		static uint64_t cached_headroom = 0;
-		if (cached_headroom == 0) {
+		static const uint64_t headroom = [&]() -> uint64_t {
+			uint64_t value = std::min<uint64_t>(budget / 8, 1024ull * 1024 * 1024);
+
 			std::printf("VMA heap budget: %llu MiB, usage: %llu MiB\n",
 			            static_cast<unsigned long long>(budget >> 20u),
 			            static_cast<unsigned long long>(usage >> 20u));
+
 			const char* env = std::getenv("KYTY_GPU_HEADROOM_MB");
 			if (env != nullptr && *env != '\0') {
-				uint64_t headroom_mib = std::strtoull(env, nullptr, 10);
-				headroom_mib = std::min<uint64_t>(headroom_mib, 1024ull);
-				headroom = headroom_mib * 1024 * 1024;
-				if (headroom_mib != 0)
-					std::printf("GPU headroom: %llu MiB (KYTY_GPU_HEADROOM_MB=%s)\n",
-					            static_cast<unsigned long long>(headroom_mib), env);
-			} else {
-				std::printf("GPU headroom: %llu MiB (default)\n",
-				            static_cast<unsigned long long>(headroom >> 20u));
+				while (*env == ' ' || *env == '\t') {
+					++env;
+				}
+				char* end                 = nullptr;
+				unsigned long long parsed = std::strtoull(env, &end, 10);
+				if (*env != '-' && end != env && *end == '\0') {
+					uint64_t headroom_mib = std::min<uint64_t>(parsed, 1024ull);
+					value                 = headroom_mib * 1024ull * 1024ull;
+					std::printf("GPU headroom: %llu MiB (KYTY_GPU_HEADROOM_MB=%llu)\n",
+					            static_cast<unsigned long long>(headroom_mib),
+					            static_cast<unsigned long long>(headroom_mib));
+					return value;
+				}
+				std::printf("Invalid KYTY_GPU_HEADROOM_MB='%s', using default\n", env);
 			}
-			cached_headroom = headroom;
-		} else {
-			headroom = cached_headroom;
-		}
-		return budget - headroom;
+
+			std::printf("GPU headroom: %llu MiB (default)\n",
+			            static_cast<unsigned long long>(value >> 20u));
+			return value;
+		}();
+
+		return (budget > headroom) ? (budget - headroom) : 0;
 	}
 	constexpr uint64_t system_reserve = 8ull * 1024 * 1024 * 1024;
 	const auto         available      = budget > usage ? budget - usage : uint64_t {0};
