@@ -6528,16 +6528,20 @@ void TextureCache::RunGarbageCollector() {
 	if (m_graphics.CanReportMemoryUsage()) {
 		// The budget Windows gives now, not the one at start-up: another program's video memory lowers it (a Discord
 		// stream: 15.2 -> 13.9 GB on a 16 GB GPU), and past it Windows moves the game's memory out of video memory
-		// (60 -> 20-30 fps). Its lowest of the last 30 s (KytyGcLiveBudgetValue), less GetTotalMemoryBudget's headroom
-		// as at start-up. Below 12 GiB of budget it only lowers the start-up trigger (issue #276: an 8 GB RX 6650 XT's
+		// (60 -> 20-30 fps). Its lowest of the last 30 s (KytyGcLiveBudgetValue), using the same collector budget
+		// policy as at start-up. Windows alone caps this below 12 GiB (issue #276: an 8 GB RX 6650 XT's
 		// budget went from 7378 to ~5570 MiB in the world; the collector, still at 6455, let the use stay up to 1.2 GiB
 		// over it once frame generation took its share, and frames waited on the memory Windows had moved out).
 		static uint64_t logged  = 0;
 		const uint64_t  live    = KytyGcLiveBudgetValue(m_graphics);
-		const uint64_t  trigger = m_graphics.small_video_memory ? std::min(live, m_start_trigger_gc_memory) : live;
+#if defined(__linux__)
+		const uint64_t trigger = live;
+#else
+		const uint64_t trigger = m_graphics.small_video_memory ? std::min(live, m_start_trigger_gc_memory) : live;
+#endif
 		if ((trigger > logged ? trigger - logged : logged - trigger) >= (uint64_t {256} << 20u)) {
 			logged = trigger;
-			std::printf("Texture collector: collects above %llu MiB (the video memory budget now, less its headroom)\n",
+			std::printf("Texture collector: collects above %llu MiB (the texture collector's video memory budget now)\n",
 			            static_cast<unsigned long long>(trigger >> 20u));
 		}
 		m_trigger_gc_memory = trigger;
