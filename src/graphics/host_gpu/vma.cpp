@@ -341,14 +341,16 @@ uint64_t GraphicContext::GetTotalMemoryBudget() const {
 	usage -= std::min(usage, simulation_ballast_bytes);
 	local -= std::min(local, simulation_ballast_bytes);
 	if (discrete) {
-		std::printf("VMA heap budget: %llu MiB, usage: %llu MiB\n",
-		            static_cast<unsigned long long>(budget >> 20u),
-		            static_cast<unsigned long long>(usage >> 20u));
 		uint64_t headroom = std::min<uint64_t>(budget / 8, 1024ull * 1024 * 1024);
 		// KYTY_GPU_HEADROOM_MB=<n>: override headroom in MiB (0 = none, max 1024).
-		static bool logged = false;
-		const char* env = std::getenv("KYTY_GPU_HEADROOM_MB");
-		if (!logged) {
+		// The value is computed once and cached so subsequent calls (classification, logging)
+		// all use the same headroom regardless of VMA budget fluctuation.
+		static uint64_t cached_headroom = 0;
+		if (cached_headroom == 0) {
+			std::printf("VMA heap budget: %llu MiB, usage: %llu MiB\n",
+			            static_cast<unsigned long long>(budget >> 20u),
+			            static_cast<unsigned long long>(usage >> 20u));
+			const char* env = std::getenv("KYTY_GPU_HEADROOM_MB");
 			if (env != nullptr && *env != '\0') {
 				uint64_t headroom_mib = std::strtoull(env, nullptr, 10);
 				headroom_mib = std::min<uint64_t>(headroom_mib, 1024ull);
@@ -360,7 +362,9 @@ uint64_t GraphicContext::GetTotalMemoryBudget() const {
 				std::printf("GPU headroom: %llu MiB (default)\n",
 				            static_cast<unsigned long long>(headroom >> 20u));
 			}
-			logged = true;
+			cached_headroom = headroom;
+		} else {
+			headroom = cached_headroom;
 		}
 		return budget - headroom;
 	}
